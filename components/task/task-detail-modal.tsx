@@ -70,8 +70,8 @@ export function TaskDetailModal({
   function handleDescriptionBlur() {
     if (description === (task.description ?? '')) return;
     startTransition(async () => {
-      await updateTask(projectId, task.id, { description });
-      onUpdated({ ...task, description });
+      const result = await updateTask(projectId, task.id, { description });
+      if (!result.error && !result.fieldErrors) onUpdated({ ...task, description });
     });
   }
 
