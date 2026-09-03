@@ -9,6 +9,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
+    fileParallelism: false,
     env: {
       DATABASE_URL: process.env.DATABASE_URL!,
       JWT_SECRET: process.env.JWT_SECRET!,
