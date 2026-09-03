@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { listProjectsForUser } from '@/actions/projects';
 import { CreateProjectDialog } from '@/components/project/create-project-dialog';
+import { LogoutButton } from '@/components/logout-button';
 import { Badge } from '@/components/ui/badge';
 
 export default async function ProjectsPage() {
@@ -10,7 +11,10 @@ export default async function ProjectsPage() {
     <div className="mx-auto max-w-4xl p-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Projects của bạn</h1>
-        <CreateProjectDialog />
+        <div className="flex items-center gap-3">
+          <CreateProjectDialog />
+          <LogoutButton />
+        </div>
       </div>
       {projects.length === 0 ? (
         <p className="text-muted-foreground">Chưa có project nào. Tạo project đầu tiên của bạn.</p>
