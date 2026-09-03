@@ -16,6 +16,8 @@ export function TaskDetailModal({
   task,
   members,
   canEdit,
+  canDelete,
+  canComment,
   onClose,
   onUpdated,
   onDeleted,
@@ -24,6 +26,8 @@ export function TaskDetailModal({
   task: Task;
   members: MemberSummary[];
   canEdit: boolean;
+  canDelete: boolean;
+  canComment: boolean;
   onClose: () => void;
   onUpdated: (task: Task) => void;
   onDeleted: (taskId: string) => void;
@@ -32,6 +36,7 @@ export function TaskDetailModal({
   const [newComment, setNewComment] = useState('');
   const [description, setDescription] = useState(task.description ?? '');
   const [isPending, startTransition] = useTransition();
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     listCommentsByTask(task.id).then(setComments);
@@ -76,20 +81,36 @@ export function TaskDetailModal({
   }
 
   function handleDelete() {
+    setActionError(null);
     startTransition(async () => {
-      await deleteTask(projectId, task.id);
-      onDeleted(task.id);
+      try {
+        const result = await deleteTask(projectId, task.id);
+        if (result.error) {
+          setActionError(result.error);
+          return;
+        }
+        onDeleted(task.id);
+      } catch {
+        setActionError('Không thể xoá task này.');
+      }
     });
   }
 
   function handleAddComment(e: React.FormEvent) {
     e.preventDefault();
     if (!newComment.trim()) return;
+    setActionError(null);
     startTransition(async () => {
-      const result = await createComment(task.id, { content: newComment });
-      if (result.data) {
-        setComments((prev) => [...prev, result.data!]);
-        setNewComment('');
+      try {
+        const result = await createComment(task.id, { content: newComment });
+        if (result.data) {
+          setComments((prev) => [...prev, result.data!]);
+          setNewComment('');
+        } else if (result.error) {
+          setActionError(result.error);
+        }
+      } catch {
+        setActionError('Không thể gửi bình luận.');
       }
     });
   }
@@ -139,6 +160,7 @@ export function TaskDetailModal({
               <Select value={task.assigneeId ?? ''} onValueChange={(v) => handleAssigneeChange(v ?? '')} disabled={!canEdit}>
                 <SelectTrigger><SelectValue placeholder="Chưa gán" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="">Chưa gán</SelectItem>
                   {members.map((m) => (
                     <SelectItem key={m.userId} value={m.userId}>{m.name}</SelectItem>
                   ))}
@@ -156,7 +178,9 @@ export function TaskDetailModal({
             </div>
           </div>
 
-          {canEdit && (
+          {actionError && <p className="text-sm text-destructive">{actionError}</p>}
+
+          {canDelete && (
             <Button variant="destructive" size="sm" disabled={isPending} onClick={handleDelete}>
               Xoá task
             </Button>
@@ -169,10 +193,14 @@ export function TaskDetailModal({
                 <li key={c.id} className="rounded border p-2 text-sm">{c.content}</li>
               ))}
             </ul>
-            <form onSubmit={handleAddComment} className="flex gap-2">
-              <Input value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Viết bình luận..." />
-              <Button type="submit" disabled={isPending}>Gửi</Button>
-            </form>
+            {canComment ? (
+              <form onSubmit={handleAddComment} className="flex gap-2">
+                <Input value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Viết bình luận..." />
+                <Button type="submit" disabled={isPending}>Gửi</Button>
+              </form>
+            ) : (
+              <p className="text-sm text-muted-foreground">Bạn không có quyền bình luận vào task này.</p>
+            )}
           </div>
         </div>
       </DialogContent>

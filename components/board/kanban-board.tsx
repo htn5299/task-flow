@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { updateTask } from '@/actions/tasks';
 import type { Task } from '@/lib/db/schema';
@@ -33,6 +34,8 @@ export function KanbanBoard({
   const [, startTransition] = useTransition();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const canEdit = myRole === 'owner' || myRole === 'admin' || myRole === 'member';
+  const canDelete = myRole === 'owner' || myRole === 'admin';
+  const canComment = myRole === 'owner' || myRole === 'admin' || myRole === 'member';
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -51,7 +54,12 @@ export function KanbanBoard({
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Board</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">Board</h1>
+          <Link href={`/projects/${projectId}/settings`} className="text-sm text-muted-foreground hover:underline">
+            Cài đặt project
+          </Link>
+        </div>
         {canEdit && (
           <CreateTaskDialog projectId={projectId} members={members} onCreated={(task) => setTasks((prev) => [...prev, task])} />
         )}
@@ -75,6 +83,8 @@ export function KanbanBoard({
           task={openTask}
           members={members}
           canEdit={canEdit}
+          canDelete={canDelete}
+          canComment={canComment}
           onClose={() => setOpenTask(null)}
           onUpdated={(updated) => {
             setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
