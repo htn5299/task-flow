@@ -259,16 +259,24 @@ JWT_SECRET=test-secret-not-for-production
 
 - [ ] **Step 6: Write `vitest.config.ts`**
 
+`vitest/config` does not reliably re-export `loadEnv` across versions — load `.env.test` directly with `dotenv` instead, so `DATABASE_URL`/`JWT_SECRET` are set in `process.env` before `test.env` reads them.
+
 ```ts
-import { defineConfig, loadEnv } from 'vitest/config';
+import { config } from 'dotenv';
+import { defineConfig } from 'vitest/config';
 import tsconfigPaths from 'vite-tsconfig-paths';
+
+config({ path: '.env.test' });
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
-    env: loadEnv('test', process.cwd(), ''),
+    env: {
+      DATABASE_URL: process.env.DATABASE_URL!,
+      JWT_SECRET: process.env.JWT_SECRET!,
+    },
   },
 });
 ```
@@ -502,7 +510,7 @@ git commit -m "feat: add password hashing and access-token JWT utilities"
 
 **Interfaces:**
 - Consumes: `db`, `refreshTokens` from `lib/db/client.ts` / `lib/db/schema.ts` (Task 2); `verifyAccessToken` from `lib/auth/jwt.ts` (Task 3).
-- Produces: `createRefreshToken(userId: string): Promise<string>`, `verifyRefreshToken(rawToken: string): Promise<{ tokenId: string; userId: string } | null>`, `revokeRefreshToken(tokenId: string): Promise<void>`, `rotateRefreshToken(tokenId: string, userId: string): Promise<string>` from `lib/auth/refresh-token.ts`; `ACCESS_TOKEN_COOKIE`, `REFRESH_TOKEN_COOKIE`, `setAuthCookies(accessToken: string, refreshToken: string): Promise<void>`, `clearAuthCookies(): Promise<void>`, `getAccessTokenCookie(): Promise<string | undefined>`, `getRefreshTokenCookie(): Promise<string | undefined>` from `lib/auth/cookies.ts`; `getCurrentUser(): Promise<{ userId: string } | null>`, `requireCurrentUser(): Promise<{ userId: string }>`, `AuthError` from `lib/auth/session.ts` — consumed by Tasks 5, 6, 7.
+- Produces: `createRefreshToken(userId: string): Promise<string>`, `verifyRefreshToken(rawToken: string): Promise<{ tokenId: string; userId: string } | null>`, `revokeRefreshToken(tokenId: string): Promise<void>`, `rotateRefreshToken(tokenId: string, userId: string): Promise<string>` from `lib/auth/refresh-token.ts`; `ACCESS_TOKEN_COOKIE`, `REFRESH_TOKEN_COOKIE`, `ACCESS_TOKEN_MAX_AGE`, `REFRESH_TOKEN_MAX_AGE`, `authCookieOptions(maxAge: number)`, `setAuthCookies(accessToken: string, refreshToken: string): Promise<void>`, `clearAuthCookies(): Promise<void>`, `getAccessTokenCookie(): Promise<string | undefined>`, `getRefreshTokenCookie(): Promise<string | undefined>` from `lib/auth/cookies.ts`; `getCurrentUser(): Promise<{ userId: string } | null>`, `requireCurrentUser(): Promise<{ userId: string }>`, `AuthError` from `lib/auth/session.ts` — consumed by Tasks 5, 6, 7. Task 6's middleware runs outside the Server Action request scope so it cannot call `setAuthCookies` directly (that uses `next/headers`'s `cookies()`), but it must reuse `ACCESS_TOKEN_MAX_AGE`/`REFRESH_TOKEN_MAX_AGE`/`authCookieOptions` instead of re-declaring the same literals — see Task 6.
 
 - [ ] **Step 1: Write the failing refresh-token tests**
 
@@ -633,25 +641,25 @@ import { cookies } from 'next/headers';
 
 export const ACCESS_TOKEN_COOKIE = 'access_token';
 export const REFRESH_TOKEN_COOKIE = 'refresh_token';
+export const ACCESS_TOKEN_MAX_AGE = 60 * 15;
+export const REFRESH_TOKEN_MAX_AGE = 60 * 60 * 24 * 30;
 
 const isProd = process.env.NODE_ENV === 'production';
 
+export function authCookieOptions(maxAge: number) {
+  return {
+    httpOnly: true as const,
+    secure: isProd,
+    sameSite: 'lax' as const,
+    path: '/',
+    maxAge,
+  };
+}
+
 export async function setAuthCookies(accessToken: string, refreshToken: string): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(ACCESS_TOKEN_COOKIE, accessToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 15,
-  });
-  cookieStore.set(REFRESH_TOKEN_COOKIE, refreshToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  cookieStore.set(ACCESS_TOKEN_COOKIE, accessToken, authCookieOptions(ACCESS_TOKEN_MAX_AGE));
+  cookieStore.set(REFRESH_TOKEN_COOKIE, refreshToken, authCookieOptions(REFRESH_TOKEN_MAX_AGE));
 }
 
 export async function clearAuthCookies(): Promise<void> {
@@ -962,27 +970,19 @@ export async function POST() {
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken, signAccessToken } from '@/lib/auth/jwt';
 import { verifyRefreshToken, rotateRefreshToken } from '@/lib/auth/refresh-token';
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from '@/lib/auth/cookies';
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  ACCESS_TOKEN_MAX_AGE,
+  REFRESH_TOKEN_MAX_AGE,
+  authCookieOptions,
+} from '@/lib/auth/cookies';
 
 export const runtime = 'nodejs';
 
-const isProd = process.env.NODE_ENV === 'production';
-
 function setAuthCookiesOnResponse(response: NextResponse, accessToken: string, refreshToken: string) {
-  response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 15,
-  });
-  response.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, authCookieOptions(ACCESS_TOKEN_MAX_AGE));
+  response.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, authCookieOptions(REFRESH_TOKEN_MAX_AGE));
 }
 
 export async function middleware(request: NextRequest) {
