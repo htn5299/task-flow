@@ -22,13 +22,17 @@ export async function createProject(input: unknown): Promise<ActionResult<{ id: 
   const parsed = createProjectSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: flattenZodErrors(parsed.error) };
 
-  const [project] = await db.insert(projects).values({
-    name: parsed.data.name,
-    description: parsed.data.description ?? null,
-    ownerId: userId,
-  }).returning();
+  const project = await db.transaction(async (tx) => {
+    const [project] = await tx.insert(projects).values({
+      name: parsed.data.name,
+      description: parsed.data.description ?? null,
+      ownerId: userId,
+    }).returning();
 
-  await db.insert(projectMembers).values({ projectId: project.id, userId, role: 'owner' });
+    await tx.insert(projectMembers).values({ projectId: project.id, userId, role: 'owner' });
+
+    return project;
+  });
 
   return { data: { id: project.id } };
 }
