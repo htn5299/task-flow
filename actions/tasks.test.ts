@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { users, projects, projectMembers } from '@/lib/db/schema';
+import { users, projects, projectMembers, tasks } from '@/lib/db/schema';
 
 let currentUserId: string;
 vi.mock('@/lib/auth/session', () => ({
@@ -56,6 +57,40 @@ describe('updateTask / deleteTask', () => {
     const updateResult = await updateTask(project.id, taskId, { status: 'in_progress' });
     expect(updateResult.error).toBeUndefined();
     await expect(deleteTask(project.id, taskId)).rejects.toThrow();
+
+    // admin can delete
+    const adminProject = await makeProjectAs('admin');
+    const adminCreated = await createTask(adminProject.id, { title: 'Admin task' });
+    const adminTaskId = adminCreated.data!.id;
+    const deleteResult = await deleteTask(adminProject.id, adminTaskId);
+    expect(deleteResult.error).toBeUndefined();
+    const remaining = await db.select().from(tasks).where(eq(tasks.id, adminTaskId));
+    expect(remaining).toEqual([]);
+  });
+
+  it('cannot update or delete a task belonging to a different project via IDOR (owner/admin of project A against project B task)', async () => {
+    // Project B: a task owned by a different project entirely.
+    const projectB = await makeProjectAs('owner');
+    const taskB = await createTask(projectB.id, { title: 'Project B task' });
+    const taskBId = taskB.data!.id;
+
+    // Project A: attacker is owner/admin of their OWN project, and tries to
+    // pass projectA.id (which they have permission on) but taskB.id (which
+    // belongs to a project they are not a member of).
+    const projectA = await makeProjectAs('owner');
+
+    const updateResult = await updateTask(projectA.id, taskBId, { title: 'Hacked' });
+    expect(updateResult.error).toBeDefined();
+    expect(updateResult.fieldErrors).toBeUndefined();
+
+    const deleteResult = await deleteTask(projectA.id, taskBId);
+    expect(deleteResult.error).toBeDefined();
+
+    // Confirm project B's task is completely untouched.
+    const [untouched] = await db.select().from(tasks).where(eq(tasks.id, taskBId));
+    expect(untouched).toBeDefined();
+    expect(untouched.title).toBe('Project B task');
+    expect(untouched.projectId).toBe(projectB.id);
   });
 });
 

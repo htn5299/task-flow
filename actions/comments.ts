@@ -32,5 +32,5 @@ export async function createComment(taskId: string, input: unknown): Promise<Act
 export async function listCommentsByTask(taskId: string): Promise<TaskComment[]> {
   const projectId = await getTaskProjectId(taskId);
   await requireMembership(projectId);
-  return db.select().from(taskComments).where(eq(taskComments.taskId, taskId));
+  return db.select().from(taskComments).where(eq(taskComments.taskId, taskId)).orderBy(taskComments.createdAt);
 }
