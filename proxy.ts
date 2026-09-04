@@ -9,14 +9,12 @@ import {
   authCookieOptions,
 } from '@/lib/auth/cookies';
 
-export const runtime = 'nodejs';
-
 function setAuthCookiesOnResponse(response: NextResponse, accessToken: string, refreshToken: string) {
   response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, authCookieOptions(ACCESS_TOKEN_MAX_AGE));
   response.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, authCookieOptions(REFRESH_TOKEN_MAX_AGE));
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
 
   if (accessToken && (await verifyAccessToken(accessToken))) {
