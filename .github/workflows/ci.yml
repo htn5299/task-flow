@@ -45,9 +45,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Type-check
-        run: npm run typecheck
-
       - name: Run migrations
         run: npm run db:migrate
 
@@ -56,3 +53,8 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Runs after build: Next.js generates route/param types (.next/types)
+      # during build, and tsc needs them to resolve types like LayoutProps.
+      - name: Type-check
+        run: npm run typecheck
